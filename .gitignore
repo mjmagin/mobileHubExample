@@ -3,8 +3,8 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=osx,node,linux,windows,sam
 
 # James Additions
-.node_modules
-!/layers/SharedInternalDependencies/nodejs/node_modules/*
+node_modules
+!node_modules/globalHelper
 
 
 ### Linux ###
