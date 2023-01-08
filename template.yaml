@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Mobile Hub
+  
+Globals:
+  Function:
+    Timeout: 3
+    Environment:
+      Variables:
+        USERS_TABLE: !Ref UsersTable
+  
+
+Resources:
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: Prod
+      Auth:
+        DefaultAuthorizer: LambdaRequestAuthorizer
+        Authorizers:
+          LambdaRequestAuthorizer:
+            FunctionArn: !GetAtt authFunction.Arn
+            FunctionInvokeRole: !GetAtt myauthFunctionRole.Arn
+            Identity:
+              Headers:
+                - Authorization
+            AuthorizerPayloadFormatVersion: 2.0
+            EnableSimpleResponses: true
+
+  umNewLoginFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: lamdas/umNewLogin
+      Handler: app.lambdaHandler
+      Runtime: nodejs16.x
+      Architectures:
+        - x86_64
+      Events:
+        umregisterEmailUser:
+          Type: HttpApi 
+          Properties:
+            Path: /umNewLogin
+            Method: POST
+            ApiId: !Ref HttpApi
+      Layers:
+        - !Ref externalDep
+        - !Ref internalDep
+  
+  umregisterEmailUserFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: lamdas/umregisterEmailUser
+      Handler: app.lambdaHandler
+      Runtime: nodejs16.x
+      Architectures:
+        - x86_64
+      Events:
+        umregisterEmailUser:
+          Type: HttpApi 
+          Properties:
+            Path: /umregisterEmailUser
+            Method: POST
+            ApiId: !Ref HttpApi
+      Layers:
+        - !Ref externalDep
+        - !Ref internalDep
+  
+  umUpdateUserFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: lamdas/umUpdateUser
+      Handler: app.lambdaHandler
+      Runtime: nodejs16.x
+      Architectures:
+        - x86_64
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        umUpdateUser:
+          Type: HttpApi 
+          Properties:
+            Path: /umUpdateUser
+            Method: POST
+            ApiId: !Ref HttpApi
+      Layers:
+        - !Ref externalDep
+        - !Ref internalDep
+        
+  externalDep:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+        LayerName: SharedExternalDependencies
+        Description: Shared external dependencies.
+        ContentUri: layers/SharedExternalDependencies/.
+        CompatibleRuntimes:
+            - nodejs16.x
+        RetentionPolicy: Retain
+        
+  internalDep:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+        LayerName: SharedInternalDependencies
+        Description: Shared internal dependencies.
+        ContentUri: layers/SharedInternalDependencies/.
+        CompatibleRuntimes:
+            - nodejs16.x
+        RetentionPolicy: Retain
+        
+  authFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lamdas/authorizer
+      Handler: app.lambdaHandler
+      Runtime: nodejs16.x
+  
+  myauthFunctionRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      # [... other properties...]
+      AssumeRolePolicyDocument:
+         Version: "2012-10-17"
+         Statement:
+           - Effect: Allow
+             Principal:
+               Service:
+                 - apigateway.amazonaws.com
+             Action:
+               - 'sts:AssumeRole'
+      Policies: 
+        # here you will put the InvokeFunction policy, for example:
+        - PolicyName: MyPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 'lambda:InvokeFunction'
+                Resource: !GetAtt authFunction.Arn
+                
+  UsersTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: id
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+
+Outputs:
+ 
+   umregisterEmailUserApi:
+     Description: "API Gateway endpoint URL for umregisterEmailUser function"
+     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/umregisterEmailUser"
+   umregisterEmailUserFunction:
+     Description: "umregisterEmailUser Lambda Function ARN"
+     Value: !GetAtt umregisterEmailUserFunction.Arn
+   umregisterEmailUserFunctionIamRole:
+     Description: "Implicit IAM Role created for umregisterEmailUser function"
+     Value: !GetAtt umregisterEmailUserFunctionRole.Arn
+   umUpdateUserApi:
+     Description: "API Gateway endpoint URL for umUpdateUser function"
+     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/umUpdateUser"
+   umUpdateUserFunction:
+     Description: "umUpdateUserLambda Function ARN"
+     Value: !GetAtt umUpdateUserFunction.Arn
+   umUpdateUserFunctionIamRole:
+     Description: "Implicit IAM Role created for umUpdateUserfunction"
+     Value: !GetAtt umUpdateUserFunctionRole.Arn
